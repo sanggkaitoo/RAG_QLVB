@@ -1,0 +1,144 @@
+import os
+import json
+import re
+import asyncio
+import subprocess
+import sys
+from pathlib import Path
+
+# --- CHỈ ĐƯỜNG CHO PYTHON THẤY THƯ MỤC GỐC ---
+project_root = str(Path(__file__).parent.parent.parent)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# ---------------------------------------------
+
+from dotenv import load_dotenv
+from playwright.async_api import async_playwright
+from src.rpa.auth import login_with_retry
+
+load_dotenv()
+
+DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "/opt/qlvb_ai/data/downloads")
+HISTORY_FILE = os.path.join(DOWNLOAD_DIR, "downloaded_records.json")
+
+def load_download_history() -> set:
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            try: return set(json.load(f))
+            except json.JSONDecodeError: return set()
+    return set()
+
+def save_download_history(history_set: set):
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(list(history_set), f, ensure_ascii=False, indent=4)
+
+def sanitize_filename(name: str) -> str:
+    return re.sub(r'[\\/*?:"<>|]', "_", name).strip()
+
+async def run_pipeline():
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    history_set = load_download_history()
+    
+    TARGET_URL = "https://egov1.laocai.gov.vn/document/xem-di-index?statustype=published&type=vanbandi"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=False) 
+        context = await browser.new_context(accept_downloads=True)
+        page = await context.new_page()
+
+        username = os.getenv("QLVB_USERNAME")
+        password = os.getenv("QLVB_PASSWORD")
+
+        print("🔄 Bắt đầu luồng tự động tải văn bản...")
+        success = await login_with_retry(page, username, password)
+        if not success:
+            print("❌ Đăng nhập thất bại. Hủy tiến trình.")
+            await browser.close()
+            return
+
+        print(f"\n🌐 Đang truy cập danh sách: {TARGET_URL}")
+        await page.goto(TARGET_URL)
+        await page.wait_for_selector("table tbody tr", timeout=15000)
+
+        page_num = 1
+        has_next_page = True
+        
+        while has_next_page:
+            print(f"\n📄 Đang xử lý Trang {page_num}...")
+            await page.wait_for_timeout(2000)
+            
+            rows = await page.locator("table tbody tr").all()
+            new_docs_in_page = 0
+            
+            for row in rows:
+                cells = row.locator("td")
+                if await cells.count() < 6: continue
+                
+                trich_yeu = (await cells.nth(1).inner_text()).strip()
+                so_ky_hieu = (await cells.nth(3).inner_text()).strip()
+                ngay_ban_hanh = (await cells.nth(4).inner_text()).strip()
+                
+                if not so_ky_hieu: continue
+
+                if so_ky_hieu in history_set:
+                    continue
+                
+                new_docs_in_page += 1
+                print(f"⬇️ Đang tải: [{so_ky_hieu}] - {trich_yeu[:40]}...")
+
+                file_links = await cells.last.locator("a").all()
+                for link_idx, link in enumerate(file_links):
+                    try:
+                        async with page.expect_download(timeout=10000) as download_info:
+                            await link.click()
+                        
+                        download = await download_info.value
+                        new_filename = f"{sanitize_filename(so_ky_hieu)}_{download.suggested_filename}"
+                        file_path = os.path.join(DOWNLOAD_DIR, new_filename)
+                        
+                        await download.save_as(file_path)
+                        
+                        meta_path = file_path + ".meta.json"
+                        with open(meta_path, "w", encoding="utf-8") as mf:
+                            json.dump({
+                                "so_ky_hieu": so_ky_hieu,
+                                "ngay_ban_hanh": ngay_ban_hanh,
+                                "trich_yeu": trich_yeu,
+                                "file_goc": download.suggested_filename
+                            }, mf, ensure_ascii=False, indent=2)
+                    except Exception as e:
+                        print(f"   ⚠️ Lỗi tải file đính kèm: {e}")
+
+                history_set.add(so_ky_hieu)
+                save_download_history(history_set)
+
+            if new_docs_in_page == 0 and page_num > 1:
+                print("🛑 Đã quét tới các văn bản cũ của ngày hôm trước. Dừng lướt web để tiết kiệm tài nguyên.")
+                break
+
+            next_li = page.locator("li.page-item", has=page.locator("a", has_text="›")).first
+            
+            class_attr = await next_li.get_attribute("class")
+            if class_attr and "disabled" in class_attr:
+                print("🏁 Đã đến trang cuối cùng của hệ thống.")
+                has_next_page = False
+            else:
+                print("➡️ Đang lật sang trang tiếp theo...")
+                await next_li.click()
+                await page.wait_for_timeout(3000) 
+                page_num += 1
+
+        print("✅ Hoàn tất tải file. Đang đóng trình duyệt...")
+        await browser.close()
+
+    print("\n🚀 BẮT ĐẦU KÍCH HOẠT HỆ THỐNG XỬ LÝ AI ĐỂ ĐỌC FILE...")
+    
+    # CHỈNH SỬA ĐƯỜNG DẪN GỌI LỆNH ĐỂ CHẠY TRÊN HỆ THỐNG MÁY CHỦ BẤT KỲ
+    python_executable = sys.executable
+    ingest_script = os.path.join(project_root, "src", "rag", "ingest.py")
+    subprocess.run([python_executable, ingest_script])
+    
+    print("\n🎉 TOÀN BỘ QUY TRÌNH ĐÃ HOÀN TẤT!")
+
+if __name__ == "__main__":
+    asyncio.run(run_pipeline())

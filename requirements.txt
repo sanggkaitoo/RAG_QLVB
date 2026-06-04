@@ -1,0 +1,16 @@
+python-dotenv==1.0.1
+pydantic==2.7.4
+loguru==0.7.2
+playwright==1.44.0
+pytesseract==0.3.10
+pdf2image==1.17.0
+opencv-python==4.10.0.82
+PyMuPDF==1.24.5
+watchdog==4.0.1
+qdrant-client==1.9.2
+sentence-transformers==3.0.1
+FlagEmbedding==1.2.10
+langchain==0.2.5
+langchain-community==0.2.5
+openai==1.35.3
+python-telegram-bot==21.3

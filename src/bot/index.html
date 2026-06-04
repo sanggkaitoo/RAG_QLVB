@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trung tâm Tri thức AI - Tra cứu Văn bản</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #1e3a8a;
+            --secondary-color: #3b82f6;
+            --background-color: #f1f5f9;
+            --card-background: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border-color: #e2e8f0;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--background-color); color: var(--text-main); line-height: 1.6; padding: 30px 20px; }
+        
+        header { text-align: center; margin-bottom: 30px; }
+        header h1 { color: var(--primary-color); font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+        header p { color: var(--text-muted); font-size: 15px; }
+        
+        .layout-container { display: flex; gap: 24px; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
+        .main-col { flex: 7; }
+        .side-col { flex: 3; position: sticky; top: 30px; }
+        
+        .search-box { display: flex; gap: 12px; background: var(--card-background); padding: 8px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); border: 1px solid var(--border-color); margin-bottom: 24px; }
+        .search-box input { flex: 1; border: none; padding: 12px 16px; font-size: 16px; color: var(--text-main); outline: none; }
+        .search-box button { background-color: var(--primary-color); color: white; border: none; padding: 0 24px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: background 0.2s; white-space: nowrap;}
+        .search-box button:hover { background-color: var(--secondary-color); }
+        .search-box button:disabled { background-color: #94a3b8; cursor: not-allowed; }
+        
+        .loading { display: none; margin-bottom: 20px; color: var(--text-muted); font-style: italic; font-size: 14px; }
+        .loading-dots:after { content: '.'; animation: dots 1.5s steps(5, end) infinite; }
+        @keyframes dots { 0%, 20% { color: rgba(0,0,0,0); text-shadow: .25em 0 0 rgba(0,0,0,0), .5em 0 0 rgba(0,0,0,0); } 40% { color: var(--text-muted); text-shadow: .25em 0 0 rgba(0,0,0,0), .5em 0 0 rgba(0,0,0,0); } 60% { text-shadow: .25em 0 0 var(--text-muted), .5em 0 0 rgba(0,0,0,0); } 80%, 100% { text-shadow: .25em 0 0 var(--text-muted), .5em 0 0 var(--text-muted); } }
+
+        .card { background: var(--card-background); border-radius: 12px; padding: 20px 24px; border: 1px solid var(--border-color); box-shadow: 0 1px 3px rgb(0 0 0 / 0.05); margin-bottom: 20px; }
+        .card h2 { font-size: 16px; font-weight: 600; color: var(--primary-color); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; display: flex; align-items: center; gap: 8px;}
+        
+        .result-section { display: none; animation: fadeIn 0.4s ease-in-out; }
+        .ai-answer { font-size: 15px; color: var(--text-main); }
+        .ai-answer p { margin-bottom: 12px; }
+        .ai-answer strong { color: #000; font-weight: 600; }
+        .ai-answer ul, .ai-answer ol { margin-left: 24px; margin-bottom: 12px; }
+        .ai-answer li { margin-bottom: 6px; }
+        
+        /* CSS cho Tooltip Trích dẫn (Hover 🔗) */
+        .cite-tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+            color: var(--secondary-color);
+            margin: 0 2px;
+            font-size: 14px;
+            text-decoration: none;
+        }
+        .cite-tooltip-text {
+            visibility: hidden;
+            width: max-content;
+            max-width: 250px;
+            background-color: #1e293b;
+            color: #f8fafc;
+            text-align: left;
+            border-radius: 6px;
+            padding: 10px 12px;
+            position: absolute;
+            z-index: 10;
+            bottom: 140%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.2s, bottom 0.2s;
+            font-size: 12.5px;
+            font-weight: normal;
+            line-height: 1.5;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        }
+        .cite-tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%; left: 50%; margin-left: -5px;
+            border-width: 5px; border-style: solid;
+            border-color: #1e293b transparent transparent transparent;
+        }
+        .cite-tooltip:hover .cite-tooltip-text {
+            visibility: visible;
+            opacity: 1;
+            bottom: 160%;
+        }
+
+        .source-item { padding: 10px 14px; border-left: 3px solid var(--secondary-color); background: #f8fafc; margin-bottom: 10px; border-radius: 0 6px 6px 0; }
+        .source-meta { font-weight: 600; font-size: 12px; color: var(--primary-color); margin-bottom: 4px; }
+        .source-text { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+        
+        .sidebar-box { background-color: #eff6ff; border: 1px solid #bfdbfe; }
+        .sidebar-box h2 { color: #1e40af; border-bottom-color: #bfdbfe; font-size: 15px;}
+        .instruction-list { list-style: none; }
+        .instruction-list li { position: relative; padding-left: 20px; margin-bottom: 12px; font-size: 13.5px; color: #1e3a8a; }
+        .instruction-list li::before { content: "✨"; position: absolute; left: 0; top: 0px; font-size: 12px; }
+        
+        .tag-container { display: flex; flex-wrap: wrap; gap: 8px; }
+        .suggest-tag { background: white; border: 1px solid #bfdbfe; color: #2563eb; padding: 6px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+        .suggest-tag:hover { background: #3b82f6; color: white; border-color: #3b82f6; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        @media (max-width: 900px) {
+            .layout-container { flex-direction: column; }
+            .side-col { width: 100%; position: static; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🏛️ TRUNG TÂM TRA CỨU DỮ LIỆU (LLM)</h1>
+        <p>Hệ thống tra cứu dữ liệu văn bản hành chính công vụ nội bộ Sở Khoa học và Công nghệ tỉnh Lào Cai</p>
+    </header>
+
+    <div class="layout-container">
+        <div class="main-col">
+            <div class="search-box">
+                <input type="text" id="queryInput" placeholder="Nhập câu hỏi hoặc nội dung cần tra cứu..." onkeypress="handleKeyPress(event)">
+                <button id="searchBtn" onclick="executeSearch()">Tra cứu</button>
+            </div>
+
+            <div class="loading" id="loadingStatus">
+                🔎 Đang quét kho vector và kết nối trí tuệ nhân tạo<span class="loading-dots"></span>
+            </div>
+
+            <div class="result-section" id="resultContainer">
+                <div class="card">
+                    <h2>🤖 Ý kiến tham mưu từ AI</h2>
+                    <div class="ai-answer" id="aiResponse"></div>
+                </div>
+
+                <div class="card">
+                    <h2>📄 Tài liệu trích dẫn gốc (Cơ sở dữ liệu Vector)</h2>
+                    <div id="sourceDocuments"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="side-col">
+            <div class="card sidebar-box">
+                <h2>💡 Hướng dẫn sử dụng</h2>
+                <ul class="instruction-list">
+                    <li><strong>Hỏi tự nhiên như giao tiếp:</strong> Thay vì tìm "Chuyển đổi số", hãy hỏi "Các nhiệm vụ trọng tâm về chuyển đổi số là gì?".</li>
+                    <li><strong>Càng chi tiết càng tốt:</strong> Đưa thêm các mốc thời gian hoặc tên ban ngành vào câu hỏi để thu hẹp phạm vi.</li>
+                    <li><strong>Tính pháp lý:</strong> Di chuột vào biểu tượng 🔗 trong câu trả lời để xem ngay nguồn gốc tài liệu.</li>
+                </ul>
+            </div>
+
+            <div class="card sidebar-box" style="background-color: #f0fdf4; border-color: #bbf7d0;">
+                <h2 style="color: #166534; border-color: #bbf7d0;">🎯 Gợi ý câu hỏi nhanh</h2>
+                <div class="tag-container">
+                    <span class="suggest-tag" onclick="fillQuery('Tổ công nghệ số cộng đồng')">Tổ công nghệ số cộng đồng</span>
+                    <span class="suggest-tag" onclick="fillQuery('Tóm tắt tình hình thực hiện Nghị quyết 57?')">Báo cáo Ban chỉ đạo 57</span>
+                    <span class="suggest-tag" onclick="fillQuery('Chỉ tiêu phát triển chính phủ điện tử năm nay?')">Chỉ tiêu chính phủ số</span>
+                    <span class="suggest-tag" onclick="fillQuery('Đề án 11 có những nhiệm vụ nào cần triển khai?')">Đề án 11</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    function fillQuery(text) {
+        document.getElementById('queryInput').value = text;
+        executeSearch();
+    }
+
+    function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+            executeSearch();
+        }
+    }
+
+    // Hàm thay thế chữ [Đoạn X] thành biểu tượng 🔗 có Tooltip
+    function renderMarkdownWithCitations(text, contexts) {
+        let html = marked.parse(text);
+        
+        // Dùng Regex tìm tất cả các chữ có dạng [Đoạn X] hoặc [Đoạn X - xyz]
+        html = html.replace(/\[Đoạn\s*(\d+)[^\]]*\]/gi, (match, p1) => {
+            const idx = parseInt(p1) - 1;
+            const doc = contexts[idx];
+            if (doc) {
+                const soKyHieu = doc.metadata.so_ky_hieu || 'Chưa rõ';
+                const ngay = doc.metadata.ngay_ban_hanh || 'Chưa rõ';
+                return `<span class="cite-tooltip">🔗
+                    <span class="cite-tooltip-text">
+                        <strong>Số:</strong> <span style="color:#60a5fa">${soKyHieu}</span><br>
+                        <strong>Ngày BH:</strong> ${ngay}<br>
+                        <hr style="border:0; border-top:1px solid #475569; margin:6px 0;">
+                        <em>Trích xuất từ dữ liệu Đoạn ${p1}</em>
+                    </span>
+                </span>`;
+            }
+            return match; // Trả về nguyên gốc nếu không tìm thấy dữ liệu
+        });
+        return html;
+    }
+
+    async function executeSearch() {
+        const queryInput = document.getElementById('queryInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const query = queryInput.value.trim();
+        if (!query) return;
+
+        const loading = document.getElementById('loadingStatus');
+        const results = document.getElementById('resultContainer');
+        const aiAnswer = document.getElementById('aiResponse');
+        const sourceDocs = document.getElementById('sourceDocuments');
+
+        queryInput.disabled = true;
+        searchBtn.disabled = true;
+        loading.style.display = 'block';
+        results.style.display = 'none';
+        aiAnswer.innerHTML = '';
+        sourceDocs.innerHTML = '';
+
+        try {
+            const response = await fetch(`/api/search_stream?q=${encodeURIComponent(query)}`);
+            if (!response.ok) throw new Error("Lỗi mạng hoặc API");
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            
+            results.style.display = 'block'; 
+            loading.style.display = 'none';
+            
+            let rawBuffer = "";
+            let sourcesRendered = false;
+            let globalContexts = [];
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                rawBuffer += decoder.decode(value, { stream: true });
+                
+                if (rawBuffer.includes("[/SOURCES]")) {
+                    const parts = rawBuffer.split("[/SOURCES]");
+                    const sourcesJsonStr = parts[0].replace("[SOURCES]", "");
+                    const aiText = parts[1]; 
+
+                    if (!sourcesRendered) {
+                        try {
+                            globalContexts = JSON.parse(sourcesJsonStr);
+                            globalContexts.forEach(doc => {
+                                const item = document.createElement('div');
+                                item.className = 'source-item';
+                                item.innerHTML = `
+                                    <div class="source-meta">
+                                        📌 Số: <span style="color: #d97706;">${doc.metadata.so_ky_hieu || 'Chưa rõ'}</span> 
+                                        | 🕒 Ban hành: ${doc.metadata.ngay_ban_hanh || 'Chưa rõ'}
+                                    </div>
+                                    <div style="font-size: 12px; font-weight: 500; color: #3b82f6; margin-bottom: 4px;">
+                                        📑 ${doc.metadata.trich_yeu || doc.metadata.file_name || ''}
+                                    </div>
+                                    <div class="source-text">"... ${doc.text.substring(0, 200)} ..."</div>
+                                `;
+                                sourceDocs.appendChild(item);
+                            });
+                            sourcesRendered = true;
+                        } catch (e) {
+                            console.error("Lỗi biên dịch JSON Nguồn:", e);
+                        }
+                    }
+
+                    if (aiText) {
+                        aiAnswer.innerHTML = renderMarkdownWithCitations(aiText, globalContexts);
+                    }
+                }
+            }
+
+        } catch (error) {
+            loading.style.display = 'none';
+            results.style.display = 'block';
+            aiAnswer.innerHTML = '<span style="color: red;">❌ Lỗi kết nối đến máy chủ AI. Vui lòng thử lại.</span>';
+            console.error(error);
+        } finally {
+            queryInput.disabled = false;
+            searchBtn.disabled = false;
+            queryInput.focus();
+        }
+    }
+</script>
+</body>
+</html>
