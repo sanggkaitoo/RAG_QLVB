@@ -60,6 +60,24 @@ async def run_pipeline():
         await page.goto(TARGET_URL)
         await page.wait_for_selector("table tbody tr", timeout=15000)
 
+        print("\n🔄 Đang thao tác sắp xếp văn bản theo 'Ngày ban hành'...")
+        try:
+            sort_icon = page.locator("table thead th").nth(5).locator("i").first
+            
+            # Click lần 1 (Có thể là xếp Tăng dần)
+            await sort_icon.click()
+            print("   - Đã click lần 1. Đang đợi bảng tải lại...")
+            await page.wait_for_timeout(3000)
+            
+            # Click lần 2 (Để đổi sang xếp Giảm dần - Mới nhất lên đầu)
+            await sort_icon.click()
+            print("   - Đã click lần 2. Đang đợi bảng tải lại...")
+            await page.wait_for_timeout(3000)
+            
+            print("✅ Đã sắp xếp văn bản thành công. Sẵn sàng quét dữ liệu!")
+        except Exception as e:
+            print(f"⚠️ Không thể click sắp xếp (Bot sẽ tiếp tục quét với thứ tự mặc định): {e}")
+
         page_num = 1
         has_next_page = True
         
