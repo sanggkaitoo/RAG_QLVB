@@ -18,7 +18,7 @@ from src.rpa.auth import login_with_retry
 
 load_dotenv()
 
-DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "/opt/qlvb_ai/data/downloads")
+DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "/home/qlvb/rag_qlvb/data/downloads")
 HISTORY_FILE = os.path.join(DOWNLOAD_DIR, "downloaded_records.json")
 
 def load_download_history() -> set:
@@ -40,6 +40,11 @@ async def run_pipeline():
     history_set = load_download_history()
     
     TARGET_URL = "https://egov1.laocai.gov.vn/document/xem-di-index?statustype=published&type=vanbandi"
+    
+    # --- THÊM GIỚI HẠN TẢI 100 VĂN BẢN ĐỂ TEST ---
+    TARGET_DOC_LIMIT = 10
+    total_downloaded = 0
+    # ---------------------------------------------
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False) 
@@ -85,12 +90,16 @@ async def run_pipeline():
             new_docs_in_page = 0
             
             for row in rows:
+                # KIỂM TRA ĐIỀU KIỆN DỪNG: Đã tải đủ 100 văn bản
+                if total_downloaded >= TARGET_DOC_LIMIT:
+                    break
+
                 cells = row.locator("td")
                 if await cells.count() < 6: continue
                 
                 trich_yeu = (await cells.nth(1).inner_text()).strip()
                 so_ky_hieu = (await cells.nth(3).inner_text()).strip()
-                ngay_ban_hanh = (await cells.nth(4).inner_text()).strip()
+                ngay_ban_hanh = (await cells.nth(5).inner_text()).strip()
                 
                 if not so_ky_hieu: continue
 
@@ -98,7 +107,9 @@ async def run_pipeline():
                     continue
                 
                 new_docs_in_page += 1
-                print(f"⬇️ Đang tải: [{so_ky_hieu}] - {trich_yeu[:40]}...")
+                total_downloaded += 1 # Tăng biến đếm tổng số văn bản đã tải
+                
+                print(f"[{total_downloaded}/{TARGET_DOC_LIMIT}] ⬇️ Đang tải: [{so_ky_hieu}] - {trich_yeu[:40]}...")
 
                 # =======================================================
                 # CẬP NHẬT MỚI: XỬ LÝ HỘP THOẠI (MODAL) TẢI FILE
@@ -153,6 +164,12 @@ async def run_pipeline():
 
                 history_set.add(so_ky_hieu)
                 save_download_history(history_set)
+
+            # KIỂM TRA LẠI: Nếu vòng lặp for vừa bị break do chạm ngưỡng 100
+            if total_downloaded >= TARGET_DOC_LIMIT:
+                print(f"\n🎉 Đã tải đủ {TARGET_DOC_LIMIT} văn bản để test. Dừng lướt web.")
+                has_next_page = False
+                break
 
             if new_docs_in_page == 0 and page_num > 1:
                 print("🛑 Đã quét tới các văn bản cũ của ngày hôm trước. Dừng lướt web để tiết kiệm tài nguyên.")
