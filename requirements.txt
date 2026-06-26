@@ -14,3 +14,5 @@ langchain==0.2.5
 langchain-community==0.2.5
 openai==1.35.3
 python-telegram-bot==21.3
+uvicorn
+fastapi
